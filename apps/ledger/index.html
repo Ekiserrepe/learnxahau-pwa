@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Xahau Live</title>
+<style>
+body{margin:0;background:#0b0f17;color:#e6edf3;font:14px/1.4 system-ui,sans-serif;padding:24px 16px}
+main{max-width:640px;margin:auto}
+h1{font-size:18px;margin:0 0 4px}
+.dim{color:#8b949e}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:18px 0}
+.k{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:12px}
+.k b{display:block;font-size:22px;color:#f0b90b;font-variant-numeric:tabular-nums}
+h2{font-size:14px;margin:22px 0 8px}
+pre{background:#161b22;border:1px solid #30363d;border-radius:10px;padding:12px;overflow:auto;font-size:12px}
+#feed div{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #21262d;font-variant-numeric:tabular-nums}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#f85149;margin-right:6px}
+.on{background:#3fb950}
+</style>
+</head>
+<body>
+<main>
+<h1><span id="dot" class="dot"></span>Xahau Live</h1>
+<div class="dim">A dashboard stored in, and reading from, the ledger it watches. <span id="net"></span></div>
+<div class="grid">
+<div class="k">Validated ledger<b id="li">…</b></div>
+<div class="k">Transactions<b id="tx">…</b></div>
+<div class="k">Base fee (drops)<b id="fee">…</b></div>
+<div class="k">Close interval<b id="ct">…</b></div>
+</div>
+<h2>Last ledgers</h2>
+<div id="feed"></div>
+<h2>This page's owner</h2>
+<pre id="acct">loading…</pre>
+<h2>This page's AppLoader object</h2>
+<pre id="loader">loading…</pre>
+</main>
+<script>
+// Replaced at build time with WSS_URL from .env: the page cannot see which node served it
+const WSS = '__WSS_URL__'
+const owner = location.pathname.replace(/\//g, '')
+const $ = id => document.getElementById(id)
+
+let ws, id = 0, lastClose
+const pending = {}
+
+// A tiny request/response layer over the WebSocket API
+const request = msg => new Promise(resolve => {
+  pending[++id] = resolve
+  ws.send(JSON.stringify({ ...msg, id }))
+})
+
+function connect() {
+  ws = new WebSocket(WSS)
+  ws.onopen = async () => {
+    $('dot').classList.add('on')
+    const { result } = await request({ command: 'server_info' })
+    $('net').textContent = `Network ${result.info.network_id} · ${result.info.build_version}`
+    request({ command: 'subscribe', streams: ['ledger'] })
+    showOwner()
+  }
+  ws.onmessage = e => {
+    const m = JSON.parse(e.data)
+    if (m.id && pending[m.id]) {
+      pending[m.id](m)
+      delete pending[m.id]
+    } else if (m.type === 'ledgerClosed') onLedger(m)
+  }
+  ws.onclose = () => {
+    $('dot').classList.remove('on')
+    setTimeout(connect, 3000)
+  }
+}
+
+function onLedger(l) {
+  $('li').textContent = l.ledger_index.toLocaleString()
+  $('tx').textContent = l.txn_count
+  $('fee').textContent = l.fee_base
+  if (lastClose) $('ct').textContent = (l.ledger_time - lastClose) + ' s'
+  lastClose = l.ledger_time
+  const row = document.createElement('div')
+  row.innerHTML = '<span></span><span class="dim"></span>'
+  row.children[0].textContent = '#' + l.ledger_index
+  row.children[1].textContent = l.txn_count + ' tx · ' + new Date((l.ledger_time + 946684800) * 1000).toLocaleTimeString()
+  $('feed').prepend(row)
+  while ($('feed').children.length > 8) $('feed').lastChild.remove()
+  showOwner()
+}
+
+async function showOwner() {
+  if (!owner) return
+  const info = await request({ command: 'account_info', account: owner, ledger_index: 'validated' })
+  const a = info.result.account_data
+  if (a) {
+    $('acct').textContent = JSON.stringify({
+      Account: a.Account,
+      Balance: (a.Balance / 1e6) + ' XAH',
+      AccountIndex: a.AccountIndex + ' (hex) = pwa' + BigInt('0x' + a.AccountIndex),
+      AppLoaderSequence: a.AppLoaderSequence
+    }, null, 2)
+  }
+  const entry = await request({ command: 'ledger_entry', app_loader: owner, ledger_index: 'validated' })
+  const n = entry.result.node
+  if (n) {
+    $('loader').textContent = JSON.stringify({
+      LedgerEntryType: n.LedgerEntryType,
+      Owner: n.Owner,
+      AppLoaderSequence: n.AppLoaderSequence,
+      PreviousTxnID: n.PreviousTxnID,
+      PreviousTxnLgrSeq: n.PreviousTxnLgrSeq,
+      bytes: n.AppLoader.length / 2
+    }, null, 2)
+  }
+}
+
+connect()
+</script>
+</body>
+</html>

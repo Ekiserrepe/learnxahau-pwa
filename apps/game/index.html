@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>Flappy Hook</title>
+<style>
+html,body{margin:0;height:100%;background:#0b0f17;overflow:hidden}
+body{display:grid;place-items:center;font:14px system-ui,sans-serif;color:#e6edf3;user-select:none;touch-action:manipulation}
+canvas{height:min(100vh,177vw);aspect-ratio:9/16;display:block;cursor:pointer}
+</style>
+</head>
+<body>
+<canvas id="c" width="360" height="640"></canvas>
+<script>
+const cv = document.getElementById('c'), g = cv.getContext('2d')
+const W = 360, H = 640, GROUND = 590
+const GAP = 160, PIPE_W = 62, SPEED = 2.4, GRAVITY = 0.42, FLAP = -7.6
+
+// The page runs in a sandbox with an opaque origin: localStorage throws,
+// so the best score only lives as long as the tab
+let best = 0
+try { best = +localStorage.best || 0 } catch {}
+
+let hook, pipes, score, state, frame
+
+function reset() {
+  hook = { y: H / 2 - 40, v: 0 }
+  pipes = []
+  score = 0
+  frame = 0
+  state = 'ready'
+}
+
+function flap() {
+  if (state === 'over') {
+    // A short pause so a frantic tap does not restart straight away
+    if (frame > 30) reset()
+    return
+  }
+  state = 'play'
+  hook.v = FLAP
+}
+
+function update() {
+  frame++
+  if (state === 'ready') {
+    hook.y = H / 2 - 40 + Math.sin(frame / 12) * 8 // bob while waiting
+    return
+  }
+  if (state === 'over') {
+    if (hook.y < GROUND - 20) { hook.v += GRAVITY; hook.y += hook.v }
+    return
+  }
+  hook.v += GRAVITY
+  hook.y += hook.v
+
+  // A new pair of pipes every 95 frames, the gap somewhere in the middle
+  if (frame % 95 === 0) pipes.push({ x: W, gap: 120 + Math.random() * (GROUND - GAP - 200), passed: false })
+  for (const p of pipes) {
+    p.x -= SPEED
+    if (!p.passed && p.x + PIPE_W < 90) {
+      p.passed = true
+      score++
+    }
+    // The hook is roughly a 28x40 box at x = 76..104
+    const inX = 104 > p.x && 76 < p.x + PIPE_W
+    const inGap = hook.y - 18 > p.gap && hook.y + 22 < p.gap + GAP
+    if (inX && !inGap) die()
+  }
+  pipes = pipes.filter(p => p.x > -PIPE_W)
+  if (hook.y + 22 > GROUND || hook.y < -40) die()
+}
+
+function die() {
+  state = 'over'
+  frame = 0
+  if (score > best) {
+    best = score
+    try { localStorage.best = best } catch {}
+  }
+}
+
+function drawHook(x, y, angle) {
+  g.save()
+  g.translate(x, y)
+  g.rotate(angle)
+  g.strokeStyle = '#f0b90b'
+  g.lineWidth = 6
+  g.lineCap = 'round'
+  // Eye, shank and bend of a fishing hook
+  g.beginPath()
+  g.arc(0, -16, 5, 0, 7)
+  g.moveTo(0, -11)
+  g.lineTo(0, 10)
+  g.arc(-9, 10, 9, 0, Math.PI)
+  g.lineTo(-18, 2)
+  g.stroke()
+  // The barb
+  g.beginPath()
+  g.moveTo(-18, 2)
+  g.lineTo(-12, 6)
+  g.stroke()
+  g.restore()
+}
+
+function text(t, y, size, color = '#fff') {
+  g.font = `800 ${size}px system-ui,sans-serif`
+  g.textAlign = 'center'
+  g.lineWidth = 6
+  g.strokeStyle = '#0b0f17'
+  g.strokeText(t, W / 2, y)
+  g.fillStyle = color
+  g.fillText(t, W / 2, y)
+}
+
+function draw() {
+  // Night sky
+  const sky = g.createLinearGradient(0, 0, 0, H)
+  sky.addColorStop(0, '#0d1b2a')
+  sky.addColorStop(1, '#1b3a4b')
+  g.fillStyle = sky
+  g.fillRect(0, 0, W, H)
+
+  // Pipes, labelled like ledger blocks
+  for (const p of pipes) {
+    g.fillStyle = '#2dd4bf'
+    g.fillRect(p.x, 0, PIPE_W, p.gap)
+    g.fillRect(p.x, p.gap + GAP, PIPE_W, GROUND - p.gap - GAP)
+    g.fillStyle = '#14b8a6'
+    g.fillRect(p.x - 4, p.gap - 22, PIPE_W + 8, 22)
+    g.fillRect(p.x - 4, p.gap + GAP, PIPE_W + 8, 22)
+  }
+
+  // Ground scrolls with the pipes
+  g.fillStyle = '#0f766e'
+  g.fillRect(0, GROUND, W, H - GROUND)
+  g.fillStyle = '#115e59'
+  const shift = state === 'play' ? (frame * SPEED) % 24 : 0
+  for (let x = -shift; x < W; x += 24) g.fillRect(x, GROUND, 12, 8)
+
+  drawHook(90, hook.y, Math.max(-0.5, Math.min(1.2, hook.v / 10)))
+
+  if (state === 'ready') {
+    text('FLAPPY HOOK', 170, 40, '#f0b90b')
+    text('Tap, click or press Space', 420, 18)
+    if (best) text(`Best ${best}`, 450, 16, '#8b949e')
+  } else {
+    text(score, 80, 48)
+  }
+  if (state === 'over') {
+    text('LEDGER REJECTED', 230, 30, '#f85149')
+    text(`Score ${score}  ·  Best ${best}`, 280, 20)
+    if (frame > 30) text('Tap to retry', 330, 16, '#8b949e')
+  }
+}
+
+// Physics run at a fixed 60 steps per second, so 120 Hz screens are not twice as fast
+let last = 0, acc = 0
+function loop(now) {
+  acc += Math.min(100, now - (last || now))
+  last = now
+  while (acc >= 1000 / 60) {
+    update()
+    acc -= 1000 / 60
+  }
+  draw()
+  requestAnimationFrame(loop)
+}
+
+cv.addEventListener('pointerdown', e => { e.preventDefault(); flap() })
+addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); flap() }
+})
+
+reset()
+requestAnimationFrame(loop)
+</script>
+</body>
+</html>

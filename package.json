@@ -1,0 +1,12 @@
+{
+  "name": "learnxahau-pwa",
+  "version": "1.0.0",
+  "description": "Learning Xahau: on-ledger web apps with the PWALoader amendment (a links page, a game, a live ledger dashboard and a verified remote loader) using xahau.js 4.2.0",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "qrcode": "^1.5.4",
+    "xahau": "4.2.0"
+  }
+}

@@ -1,0 +1,16 @@
+# Xahau Testnet (network 21338, PWALoader enabled, public PWA portal at pwa.exposed). Run `node 00-create-accounts.js`
+# to create the accounts below with the faucet and fill this file for you
+WSS_URL=wss://xahau-test.net
+FAUCET_URL=https://xahau-test.net/newcreds
+PWA_ZONE=pwa.exposed              # documents are served at https://pwa<AccountIndex>.<PWA_ZONE>/<r-address>
+EXPLORER_URL=https://explorer.xahau-test.net
+VERIFY_WSS_URL=                  # optional second node for 05-verify.js (defaults to WSS_URL)
+
+# One account per app: an account holds at most one AppLoader
+LINKS_SEED=snqsNFN4BnXxjZAcRAUtLSBM9yvxv  # apps/links   - the links page
+GAME_SEED=ssGExtjt7MZNgi9Yc5dTcS6Yrbagv  # apps/game    - Flappy Hook
+LEDGER_SEED=shG7TDgJTvWxcRRyeu9k1GH1b1g5Z  # apps/ledger  - live ledger dashboard
+LOADER_SEED=ssxyqfNNJjNVALypunMmsLESqh3Px  # apps/loader  - verified loader for apps/remote
+
+# Where apps/loader fetches the off-ledger app from (its SHA-256 is pinned at build time)
+REMOTE_URL=https://cdn.jsdelivr.net/gh/Ekiserrepe/learnxahau-pwa@main/apps/remote/index.html
